@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123c35">
+  <meta http-equiv="refresh" content="600">
+  <title>RIMS | Data Desk</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#overview" aria-label="RIMS Data Desk home">
+      <span class="brand-mark">R</span>
+      <span>RIMS <small>DATA DESK</small></span>
+    </a>
+    <nav class="main-nav" aria-label="Dashboard sections">
+      {% for name, data in datasets.items() %}
+        <a href="#{{ name }}">{{ data.label }}</a>
+      {% endfor %}
+    </nav>
+    <a class="top-action" href="#scrape">Run scraper <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main id="overview">
+    <section class="intro">
+      <div>
+        <p class="eyebrow">RIMS / INSTITUTIONAL DIRECTORY</p>
+        <h1>Data Desk<span>.</span></h1>
+        <p class="intro-copy">A current view of people, programs, announcements, and files.</p>
+      </div>
+      <div class="intro-stamp" aria-hidden="true"><span>R</span><small>INSTITUTE<br>RECORDS</small></div>
+    </section>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="messages" role="status">
+          {% for category, message in messages %}
+            <p class="message message-{{ category }}">{{ message }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="metrics" aria-label="Record totals">
+      {% for name, data in datasets.items() %}
+        <a class="metric metric-{{ name }}" href="#{{ name }}">
+          <span class="metric-label">{{ data.label }}</span>
+          <strong>{{ data.count }}</strong>
+          <span class="metric-foot">records <span aria-hidden="true">↘</span></span>
+        </a>
+      {% endfor %}
+    </section>
+
+    <section class="scrape-band" id="scrape">
+      <div class="scrape-copy">
+        <p class="eyebrow">UPDATE THE DIRECTORY</p>
+        <h2>Run a scrape</h2>
+        <p>Choose sections to refresh manually, or let the hourly sync update all four.</p>
+      </div>
+      <form class="scrape-form" method="post" action="{{ url_for('scrape') }}">
+        <div class="scrape-options">
+          {% for name, data in sections.items() %}
+            <label class="check-option">
+              <input type="checkbox" name="sections" value="{{ name }}" {% if name in selected_sections %}checked{% endif %}>
+              <span>{{ data.label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        <button class="button button-primary" type="submit">Start scrape <span aria-hidden="true">→</span></button>
+      </form>
+    </section>
+
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">BROWSE RECORDS</p>
+        <h2>Directory</h2>
+      </div>
+      <div class="directory-actions">
+        <span class="live-tag"><i></i> AUTO-SYNC · HOURLY</span>
+        {% if selected_sections|length < sections|length %}
+          <a class="show-all" href="{{ url_for('index') }}">Show all sections</a>
+        {% endif %}
+        <span class="live-tag"><i></i> CSV DATA</span>
+      </div>
+    </div>
+
+    {% for name, data in datasets.items() %}
+      <section class="data-section" id="{{ name }}">
+        <div class="section-title">
+          <div class="section-number">0{{ loop.index }}</div>
+          <div>
+            <h3>{{ data.label }}</h3>
+            <p>{{ data.count }} matching record{% if data.count != 1 %}s{% endif %}</p>
+          </div>
+        </div>
+        <div class="table-area">
+          <div class="table-toolbar">
+            <form class="filters" method="get" action="{{ url_for('index') }}#{{ name }}">
+              {% for section_name in selected_sections %}
+                <input type="hidden" name="section" value="{{ section_name }}">
+              {% endfor %}
+              <label class="search-field">
+                <span class="visually-hidden">Search {{ data.label|lower }}</span>
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input type="search" name="q_{{ name }}" value="{{ data.query }}" placeholder="Search {{ data.label|lower }}">
+              </label>
+              {% if data.filter %}
+                <label class="select-field">
+                  <span class="visually-hidden">Filter by {{ data.filter|replace('_', ' ') }}</span>
+                  <select name="filter_{{ name }}">
+                    <option value="">All {{ data.filter|replace('_', ' ') }}s</option>
+                    {% for value in data.filter_values %}
+                      <option value="{{ value }}" {% if value == data.selected %}selected{% endif %}>{{ value }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+              {% endif %}
+              <button class="button button-filter" type="submit">Apply</button>
+            </form>
+            <form method="get" action="{{ url_for('download', section=name) }}">
+              <input type="hidden" name="q_{{ name }}" value="{{ data.query }}">
+              {% if data.filter %}<input type="hidden" name="filter_{{ name }}" value="{{ data.selected }}">{% endif %}
+              <button class="button button-download" type="submit"><span aria-hidden="true">↓</span> CSV</button>
+            </form>
+          </div>
+          {% if data.rows %}
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th class="row-number">#</th>{% for column in data.columns %}<th>{{ column|replace('_', ' ') }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                  {% for row in data.rows %}
+                    <tr>
+                      <td class="row-number">{{ loop.index }}</td>
+                      {% for column in data.columns %}
+                        {% set value = row[column] %}
+                        <td>
+                          {% if value and column in ['link', 'photo_url', 'source_url', 'url', 'found_on'] and is_http_url(value) %}
+                            <a class="table-link" href="{{ value }}" target="_blank" rel="noopener noreferrer" title="{{ value }}">{{ value|string|truncate(42, true) }}</a>
+                          {% else %}
+                            {{ value }}
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="empty-state"><span aria-hidden="true">—</span><p>No matching records.</p></div>
+          {% endif %}
+        </div>
+      </section>
+    {% endfor %}
+  </main>
+  <footer><span>RIMS DATA DESK</span><span>Local dashboard · Data from CSV files</span></footer>
+</body>
+</html>
